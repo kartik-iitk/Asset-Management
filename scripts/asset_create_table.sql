@@ -3,8 +3,8 @@
     Step: 
         1)  Activity will be created
         2)  To carry out activity using some items are required.
-            Here if the item required is not available (quantity) or is not listed (unknown) in Item table, 
-            then new item is first created in Item table.
+            Here if the item required is not listed (unknown) in Item table, 
+            then new item is first created in Item. 
         3)  Request will be created for the user (Student/individual). 
         4)  The list will be reviewed and will be approved/ rejected
         5)  After the approval, the available items will be issued for that activity.
@@ -146,6 +146,7 @@ CREATE TABLE UserRole (
     /* mapping of user, role and lab */
     UserRoleId INT NOT NULL AUTO_INCREMENT,
     UserId INT,
+    DeptID INT, /* added for HOD of the department with no lab linked to this role*/
     LabId INT,
     RoleId INT,
     DateJoined DATETIME,
@@ -154,6 +155,7 @@ CREATE TABLE UserRole (
     IsActive BOOLEAN, /*Required or not?*/
     CONSTRAINT pk_ur PRIMARY KEY (UserRoleId),
     CONSTRAINT fk_ur_UserId FOREIGN KEY (UserId) REFERENCES  Users (UserId),
+    CONSTRAINT fk_ur_DeptID FOREIGN KEY (DeptID) REFERENCES  Department (DeptID), 
     CONSTRAINT fk_ur_LabId FOREIGN KEY (LabId) REFERENCES  Lab (LabId), 
     CONSTRAINT fk_ur_RoleId FOREIGN KEY (RoleId) REFERENCES  Roles (RoleId)
 );
