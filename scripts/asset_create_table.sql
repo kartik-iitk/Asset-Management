@@ -89,6 +89,7 @@ DROP TABLE IF EXISTS Department;
 DROP TABLE IF EXISTS Users;
 DROP TABLE IF EXISTS Roles;
 
+
 CREATE TABLE Roles (
     RoleId INT NOT NULL AUTO_INCREMENT,
     RoleName VARCHAR(50), /* Admin, HOD, Lab incharge (Professor), Lab assistant, Student */ 
@@ -201,8 +202,8 @@ CREATE TABLE LabActivity (
     If purchase is made against the activity, then it is subtracted from activity FundsAvailable.
     FundsAvailable will be updated after the completion of Purchase (item received).
 
-    If the activity is closed, then balance fund should be moved to Lab table (add in FundsAvailable),
-    and IsClosed will be set to 1. FundsAvailable in this table can be made 0. 
+    If the activity is closed, then balance fund (FundsAvailable) should be moved to Lab table (add in FundsAvailable),
+    and IsClosed will be set to 1. Amount in FundsAvailable will be moved to FundsAvailable of Lab. (Need More discussion) 
     
     All insertion/updation should be logged in LabActivityLog table
     */  
@@ -213,6 +214,7 @@ CREATE TABLE LabActivity (
     ActivityDescription VARCHAR(100), /* project code, name, also for other status*/
     FundsAllocated  FLOAT, /* Total Purchase order amount for this activity should not exceed this amount */
     FundsAvailable FLOAT, 
+   /* FundsRefund FLOAT, Need Discussion. Can be used for balanced refund amount when activity is closed */
     StartDate DATETIME,
     EndDate DATETIME,
     IsClosed BOOLEAN, /* If activity closed then value should be 1 else 0 */
@@ -244,7 +246,7 @@ CREATE TABLE Request (
     RequestDate DATETIME,   
     Requestor INT,  /*User id of the person (student, professor) who created request for items for the activity */
     RequestStatus VARCHAR(50), /* Generated, Approved, Rejected, Complete, other */
-    IsActive BOOLEAN,
+  /*  IsActive BOOLEAN,*/
     DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
     DateModified DATETIME ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT pk_rq PRIMARY KEY (RequestId),
@@ -289,7 +291,7 @@ CREATE TABLE PurchaseOrder (
     POStatus VARCHAR(50),
     DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
     DateModified DATETIME ON UPDATE CURRENT_TIMESTAMP,
-    IsActive BOOLEAN,
+ /*   IsActive BOOLEAN,*/
     CONSTRAINT pk_po PRIMARY KEY (POId),
     CONSTRAINT fk_po_ActivityId FOREIGN KEY (ActivityId) REFERENCES  LabActivity (ActivityId)
 );
@@ -372,3 +374,8 @@ CREATE TABLE ActivityItemTransaction (
     CONSTRAINT fk_ait_UserId FOREIGN KEY (Requestor) REFERENCES  Users (UserId),
     CONSTRAINT fk_ait_UserId1 FOREIGN KEY (ProcessedBy) REFERENCES  Users (UserId)
 );
+
+
+
+
+ 
