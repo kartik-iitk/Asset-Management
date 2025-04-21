@@ -5,25 +5,24 @@ SELECT
   D.DeptName,  
   L.LabName,  
   L.FundsAvailable,  
-  SUM(LA.FundsAllocated - LA.FundsAvailable)    AS UsedByActivities,
-  COALESCE(po_total.purchase,0)                 AS SpentOnPOs
+  COALESCE(actlogs.Added,0) AS TotalAllocated,
+  COALESCE(actlogs.Spent,0) AS TotalSpent,
+  COALESCE(po.Purchase,0)   AS SpentOnPOs
 FROM Lab L  
 JOIN Department D USING(DeptId)  
-LEFT JOIN LabActivity LA USING(LabId)  
 LEFT JOIN (
-    SELECT ActivityId, SUM(Amount) AS purchase
-      FROM PurchaseOrder
-     WHERE POStatus = 'Closed'
-     GROUP BY ActivityId
-  ) po ON po.ActivityId = LA.ActivityId
+    SELECT LA.LabId,
+           SUM(CASE WHEN LAL.ActionTaken='Added' THEN LAL.Funds ELSE 0 END) AS Added,
+           SUM(CASE WHEN LAL.ActionTaken='Spent' THEN LAL.Funds ELSE 0 END) AS Spent
+      FROM LabActivityLog LAL
+      JOIN LabActivity LA ON LA.ActivityId = LAL.ActivityId
+     GROUP BY LA.LabId
+) actlogs ON actlogs.LabId = L.LabId
 LEFT JOIN (
-    SELECT ActivityId, SUM(purchase) AS purchase
-      FROM (
-         SELECT ActivityId, SUM(Amount) AS purchase
-           FROM PurchaseOrder
-          WHERE POStatus = 'Closed'
-          GROUP BY ActivityId
-       ) t
-     GROUP BY ActivityId
-  ) po_total ON po_total.ActivityId = LA.ActivityId
+    SELECT LA.LabId, SUM(PO.Amount) AS Purchase
+      FROM PurchaseOrder PO
+      JOIN LabActivity LA ON LA.ActivityId = PO.ActivityId
+     WHERE PO.POStatus='Closed'
+     GROUP BY LA.LabId
+) po ON po.LabId = L.LabId
 GROUP BY D.DeptName, L.LabName;

@@ -171,7 +171,6 @@ CREATE TABLE LabActivity (
   InitiatorId         INT,
   ActivityType        VARCHAR(20),
   ActivityDescription VARCHAR(100),
-  FundsAllocated      FLOAT,
   FundsAvailable      FLOAT,
   StartDate           DATETIME,
   EndDate             DATETIME,
