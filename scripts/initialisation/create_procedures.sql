@@ -173,21 +173,18 @@ BEGIN
         SET POStatus='Rejected',
             DateModified=NOW()
       WHERE POId = p_POId;
-      COMMIT;
-      LEAVE_PROC: 
-      -- exit without further processing
-      BEGIN END;
+    ELSEIF v_POAmount <= v_FundsAvail THEN
+      -- sufficient funds: approve this PO
+      UPDATE PurchaseOrder
+        SET POStatus='Approved',
+            DateModified=NOW()
+      WHERE POId = p_POId;
+
+      UPDATE LabActivity
+        SET FundsAvailable = FundsAvailable - v_POAmount
+      WHERE ActivityId = v_ActivityId;
     END IF;
 
-    -- deduct funds & approve PO
-    UPDATE LabActivity
-      SET FundsAvailable = FundsAvailable - v_POAmount
-    WHERE ActivityId = v_ActivityId;
-
-    UPDATE PurchaseOrder
-      SET POStatus='Approved',
-          DateModified=NOW()
-    WHERE POId = p_POId;
   COMMIT;
 END$$
 
