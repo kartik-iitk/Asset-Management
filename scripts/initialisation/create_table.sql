@@ -121,6 +121,7 @@ CREATE TABLE Lab (
   DateCreated    DATETIME     DEFAULT CURRENT_TIMESTAMP,
   DateModified   DATETIME     ON UPDATE CURRENT_TIMESTAMP,
   IsActive       BOOLEAN,
+  RecentActionTaken VARCHAR(50),
   CONSTRAINT fk_l_DeptId FOREIGN KEY (DeptId) REFERENCES Department(DeptId)
 );
 

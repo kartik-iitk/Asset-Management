@@ -106,7 +106,8 @@ CREATE PROCEDURE sp_add_lab_funds(
 BEGIN
   START TRANSACTION;
     UPDATE Lab
-      SET FundsAvailable = FundsAvailable + p_Amount
+      SET FundsAvailable = FundsAvailable + p_Amount,
+          RecentActionTaken = 'Added Funds to Lab'
     WHERE LabId = p_LabId;
   COMMIT;
 END$$
@@ -124,15 +125,30 @@ BEGIN
     RESIGNAL;
   END;
 
-  START TRANSACTION;
+  DECLARE v_FundsAvail FLOAT;
+  SELECT FundsAvailable
+    INTO v_FundsAvail
+  FROM Lab
+  WHERE LabId = p_LabId
+  FOR UPDATE;
+
+  IF v_FundsAvail < p_Amount THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Insufficient funds for allocation';
+  ELSEIF v_FundsAvail >= p_Amount THEN
+    START TRANSACTION;
     UPDATE Lab
-      SET FundsAvailable = FundsAvailable - p_Amount
+      SET FundsAvailable = FundsAvailable - p_Amount,
+          RecentActionTaken = 'Allocated Funds to Activity'
     WHERE LabId = p_LabId;
 
     UPDATE LabActivity
       SET FundsAvailable = FundsAvailable + p_Amount
     WHERE ActivityId = p_ActivityId;
-  COMMIT;
+    COMMIT;
+  END IF;
+
+  
 END$$
 
 -- approve_po procedure
@@ -275,7 +291,8 @@ BEGIN
 
     -- refund leftover funds back to the lab
     UPDATE Lab
-      SET FundsAvailable = FundsAvailable + v_FundsAvail
+      SET FundsAvailable = FundsAvailable + v_FundsAvail,
+          RecentActionTaken = 'Refunded Funds from Activity'
     WHERE LabId = v_LabId;
 
     -- close the activity
