@@ -56,7 +56,7 @@
          Otherwise data won't be saved in database. 
          Check for rollback if cancel button is clicked.
 
-New Modifications: You only request items that need to be purchased. Otherwise lab assistant will issue them directly. Also one request corresponds to 1 item with a quantity associated with it. A purchase order can have multiple items. A request may be approved even if funds are not sufficient, but will be rejected at the purchase order stage.
+New Modifications: You only request items that need to be purchased. Otherwise lab assistant will issue them directly. Also one request corresponds to 1 item with a quantity associated with it. A purchase order can have multiple items. A request may be approved even if funds are not sufficient, but will be rejected at the purchase order stage. Assests are the items that are available in the lab currently. Quantity = 0 => it still can be there in some activity.
 */
 
 USE AssetManagement;
@@ -239,7 +239,7 @@ CREATE TABLE PurchaseOrder (
   ActivityId   INT,
   OrderDate    DATETIME,
   Amount       FLOAT,
-  POStatus     VARCHAR(50),
+  POStatus     VARCHAR(50),      -- Pending, Approved, Rejected, Closed
   DateCreated  DATETIME DEFAULT CURRENT_TIMESTAMP,
   DateModified DATETIME ON UPDATE CURRENT_TIMESTAMP,
   /* IsActive removed per teammate feedback */
@@ -261,7 +261,7 @@ CREATE TABLE POLog (
   POLogId           INT AUTO_INCREMENT PRIMARY KEY,
   POId              INT,
   POCreatedBy       VARCHAR(100),    -- was INT
-  POStatus          VARCHAR(50),
+  POStatus          VARCHAR(50),    -- Pending, Approved, Rejected, Closed
   POStatusDescription VARCHAR(100),
   DateCreated       DATETIME DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_pol_POId FOREIGN KEY (POId) REFERENCES PurchaseOrder(POId)
