@@ -55,6 +55,8 @@
       2) We need to commit transaction separately on button click (for insert/update/delete). 
          Otherwise data won't be saved in database. 
          Check for rollback if cancel button is clicked.
+
+New Modifications: You only request items that need to be purchased. Otherwise lab assistant will issue them directly. Also one request corresponds to 1 item with a quantity associated with it. A purchase order can have multiple items. A request may be approved even if funds are not sufficient, but will be rejected at the purchase order stage.
 */
 
 USE AssetManagement;
@@ -121,7 +123,7 @@ CREATE TABLE Lab (
   DateCreated    DATETIME     DEFAULT CURRENT_TIMESTAMP,
   DateModified   DATETIME     ON UPDATE CURRENT_TIMESTAMP,
   IsActive       BOOLEAN,
-  RecentActionTaken VARCHAR(50),
+  RecentActionTaken VARCHAR(50), -- On the funds: 'Added', 'Allocated', 'Refunded'
   CONSTRAINT fk_l_DeptId FOREIGN KEY (DeptId) REFERENCES Department(DeptId)
 );
 
@@ -145,7 +147,7 @@ CREATE TABLE LabLog (
   LabLogId         INT AUTO_INCREMENT PRIMARY KEY,
   LabId            INT,
   ActionTakenBy    VARCHAR(100),     -- was INT
-  ActionTaken      VARCHAR(20),
+  ActionTaken      VARCHAR(20),     -- On the funds: 'Added', 'Allocated', 'Refunded'
   ActionDescription VARCHAR(100),
   Amount           FLOAT,
   DateCreated      DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -186,7 +188,7 @@ CREATE TABLE LabActivityLog (
   ActivityLogId    INT AUTO_INCREMENT PRIMARY KEY,
   ActivityId       INT,
   ActionTakenBy    VARCHAR(100),     -- was INT
-  ActionTaken      VARCHAR(20),
+  ActionTaken      VARCHAR(20),      -- On the funds: 'Added', 'Spent', 'Refunded'
   ActionDescription VARCHAR(100),
   Funds            FLOAT,
   DateCreated      DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -199,30 +201,33 @@ CREATE TABLE Request (
   ActivityID    INT,
   RequestDate   DATETIME,
   Requestor     INT,
-  RequestStatus VARCHAR(50),
-  /* IsActive removed per teammate feedback */
+  RequestStatus VARCHAR(50), -- Pending, Approved, Rejected
+  ItemId             INT,
+  QuantityRequested  INT,
+  -- IsUnknown          BOOLEAN,
   DateCreated   DATETIME DEFAULT CURRENT_TIMESTAMP,
   DateModified  DATETIME ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_rq_ActivityId FOREIGN KEY (ActivityID) REFERENCES LabActivity(ActivityId),
-  CONSTRAINT fk_rq_UserId     FOREIGN KEY (Requestor)   REFERENCES Users(UserId)
-);
-
-CREATE TABLE RequestItem (
-  RItemID            INT AUTO_INCREMENT PRIMARY KEY,
-  RequestId          INT,
-  ItemId             INT,
-  IsUnknown          BOOLEAN,
-  QuantityRequested  INT,
-  DateCreated        DATETIME DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_ri_RequestId FOREIGN KEY (RequestId) REFERENCES Request(RequestId),
+  CONSTRAINT fk_rq_UserId     FOREIGN KEY (Requestor)   REFERENCES Users(UserId),
   CONSTRAINT fk_ri_ItemId    FOREIGN KEY (ItemId)    REFERENCES Item(ItemId)
 );
+
+-- CREATE TABLE RequestItem (
+--   RItemID            INT AUTO_INCREMENT PRIMARY KEY,
+--   RequestId          INT,
+--   ItemId             INT,
+--   IsUnknown          BOOLEAN,
+--   QuantityRequested  INT,
+--   DateCreated        DATETIME DEFAULT CURRENT_TIMESTAMP,
+--   CONSTRAINT fk_ri_RequestId FOREIGN KEY (RequestId) REFERENCES Request(RequestId),
+--   CONSTRAINT fk_ri_ItemId    FOREIGN KEY (ItemId)    REFERENCES Item(ItemId)
+-- );
 
 CREATE TABLE RequestLog (
   RequestLogId     INT AUTO_INCREMENT PRIMARY KEY,
   RequestId        INT,
   ActionTakenBy    VARCHAR(100),     -- was INT
-  RequestStatus    VARCHAR(50),
+  RequestStatus    VARCHAR(50),       -- Pending, Approved, Rejected
   RequestDescription VARCHAR(100),
   DateCreated      DATETIME DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_ril_RequestId FOREIGN KEY (RequestId) REFERENCES Request(RequestId)
