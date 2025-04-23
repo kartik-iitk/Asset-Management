@@ -1,6 +1,7 @@
 USE AssetManagement;
 
 -- Consolidating DROP PROCEDURE statements 
+DROP PROCEDURE IF EXISTS sp_add_Lab;
 DROP PROCEDURE IF EXISTS sp_add_user;
 DROP PROCEDURE IF EXISTS sp_add_lab_funds;
 DROP PROCEDURE IF EXISTS sp_allocate_funds;
@@ -18,6 +19,41 @@ DROP PROCEDURE IF EXISTS sp_receive_items;
 DROP PROCEDURE IF EXISTS sp_return_assets;
 
 DELIMITER $$
+
+CREATE PROCEDURE sp_add_Lab(
+  IN p_DeptName      VARCHAR(50),
+  IN p_LabName      VARCHAR(50),
+  IN p_FundsAvailable   FLOAT
+)
+BEGIN
+	DECLARE v_DeptId INT;
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+	
+    SELECT DeptId INTO v_DeptId
+    FROM Department 
+    WHERE DeptName = p_DeptName
+    AND IsActive = 1; 
+    
+    -- Insert the new Lab under a Department
+    INSERT INTO Lab (
+      DeptId, 
+      LabName, 
+      FundsAvailable
+      ) VALUES (
+      v_DeptId, 
+      p_LabName, 
+      p_FundsAvailable
+    );
+
+	COMMIT;
+END$$
 
 -- add_user procedure
 CREATE PROCEDURE sp_add_user(
