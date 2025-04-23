@@ -1,62 +1,31 @@
 USE AssetManagement;
 
 -- Consolidating DROP PROCEDURE statements 
-DROP PROCEDURE IF EXISTS sp_add_Lab;
-DROP PROCEDURE IF EXISTS sp_add_user;
-DROP PROCEDURE IF EXISTS sp_add_lab_funds;
-DROP PROCEDURE IF EXISTS sp_allocate_funds;
-DROP PROCEDURE IF EXISTS sp_approve_po;
-DROP PROCEDURE IF EXISTS sp_approve_request;
-DROP PROCEDURE IF EXISTS sp_close_activity;
-DROP PROCEDURE IF EXISTS sp_create_asset;
-DROP PROCEDURE IF EXISTS sp_create_item;
-DROP PROCEDURE IF EXISTS sp_create_lab_activity;
-DROP PROCEDURE IF EXISTS sp_create_purchase;
-DROP PROCEDURE IF EXISTS sp_deactivate_user;
+DROP PROCEDURE IF EXISTS sp_create_user;
+DROP PROCEDURE IF EXISTS sp_create_lab;
+DROP PROCEDURE IF EXISTS sp_allocate_funds_to_lab;
+DROP PROCEDURE IF EXISTS sp_create_activity;
+DROP PROCEDURE IF EXISTS sp_allocate_funds_to_activity;
 DROP PROCEDURE IF EXISTS sp_issue_assets;
+DROP PROCEDURE IF EXISTS sp_create_item;
 DROP PROCEDURE IF EXISTS sp_raise_request;
+DROP PROCEDURE IF EXISTS sp_approve_request;
+DROP PROCEDURE IF EXISTS sp_create_PO;
+DROP PROCEDURE IF EXISTS sp_log_PO_item;
+DROP PROCEDURE IF EXISTS sp_approve_PO;
 DROP PROCEDURE IF EXISTS sp_receive_items;
+DROP PROCEDURE IF EXISTS sp_close_request;
 DROP PROCEDURE IF EXISTS sp_return_assets;
+DROP PROCEDURE IF EXISTS sp_deallocate_funds_from_activity;
+DROP PROCEDURE IF EXISTS sp_destroy_asset;
+DROP PROCEDURE IF EXISTS sp_close_activity;
+DROP PROCEDURE IF EXISTS sp_get_asset_quantity;
+DROP PROCEDURE IF EXISTS sp_get_lab_funds;
 
 DELIMITER $$
 
-CREATE PROCEDURE sp_add_Lab(
-  IN p_DeptName      VARCHAR(50),
-  IN p_LabName      VARCHAR(50),
-  IN p_FundsAvailable   FLOAT
-)
-BEGIN
-	DECLARE v_DeptId INT;
-
-  DECLARE EXIT HANDLER FOR SQLEXCEPTION
-  BEGIN
-    ROLLBACK;
-    RESIGNAL;
-  END;
-
-  START TRANSACTION;
-	
-    SELECT DeptId INTO v_DeptId
-    FROM Department 
-    WHERE DeptName = p_DeptName
-    AND IsActive = 1; 
-    
-    -- Insert the new Lab under a Department
-    INSERT INTO Lab (
-      DeptId, 
-      LabName, 
-      FundsAvailable
-      ) VALUES (
-      v_DeptId, 
-      p_LabName, 
-      p_FundsAvailable
-    );
-
-	COMMIT;
-END$$
-
 -- add_user procedure
-CREATE PROCEDURE sp_add_user(
+CREATE PROCEDURE sp_create_user(
   IN p_Username      VARCHAR(20),
   IN p_Password      VARCHAR(100),
   IN p_InstituteId   VARCHAR(50),
@@ -131,11 +100,44 @@ BEGIN
   COMMIT;
 END$$
 
--- add_lab_funds procedure
--- To invoke:
--- CALL sp_add_lab_funds(1, 5000.00);
+CREATE PROCEDURE sp_add_Lab(
+  IN p_DeptName      VARCHAR(50),
+  IN p_LabName      VARCHAR(50),
+  IN p_FundsAvailable   FLOAT
+)
+BEGIN
+	DECLARE v_DeptId INT;
 
-CREATE PROCEDURE sp_add_lab_funds(
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+	
+    SELECT DeptId INTO v_DeptId
+    FROM Department 
+    WHERE DeptName = p_DeptName
+    AND IsActive = 1; 
+    
+    -- Insert the new Lab under a Department
+    INSERT INTO Lab (
+      DeptId, 
+      LabName, 
+      FundsAvailable,
+      IsActive
+      ) VALUES (
+      v_DeptId, 
+      p_LabName, 
+      p_FundsAvailable,
+      True
+    );
+
+	COMMIT;
+END$$
+
+CREATE PROCEDURE sp_allocate_funds_to_lab(
   IN p_LabId   INT,
   IN p_Amount  FLOAT
 )
@@ -143,285 +145,12 @@ BEGIN
   START TRANSACTION;
     UPDATE Lab
       SET FundsAvailable = FundsAvailable + p_Amount,
-          RecentActionTaken = 'Added Funds to Lab'
+          RecentActionTaken = 'Added'
     WHERE LabId = p_LabId;
   COMMIT;
 END$$
 
--- allocate_funds procedure
-CREATE PROCEDURE sp_allocate_funds(
-  IN p_LabId       INT,
-  IN p_ActivityId  INT,
-  IN p_Amount      FLOAT
-)
-BEGIN
-  DECLARE EXIT HANDLER FOR SQLEXCEPTION
-  BEGIN
-    ROLLBACK;
-    RESIGNAL;
-  END;
-
-  DECLARE v_FundsAvail FLOAT;
-  SELECT FundsAvailable
-    INTO v_FundsAvail
-  FROM Lab
-  WHERE LabId = p_LabId
-  FOR UPDATE;
-
-  IF v_FundsAvail < p_Amount THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Insufficient funds for allocation';
-  ELSEIF v_FundsAvail >= p_Amount THEN
-    START TRANSACTION;
-    UPDATE Lab
-      SET FundsAvailable = FundsAvailable - p_Amount,
-          RecentActionTaken = 'Allocated Funds to Activity'
-    WHERE LabId = p_LabId;
-
-    UPDATE LabActivity
-      SET FundsAvailable = FundsAvailable + p_Amount
-    WHERE ActivityId = p_ActivityId;
-    COMMIT;
-  END IF;
-
-  
-END$$
-
-
--- approve_po procedure
-CREATE PROCEDURE sp_approve_po(
-  IN p_POId INT
-)
-BEGIN
-  DECLARE v_ActivityId  INT;
-  DECLARE v_POAmount    FLOAT;
-  DECLARE v_FundsAvail  FLOAT;
-
-  DECLARE EXIT HANDLER FOR SQLEXCEPTION
-  BEGIN
-    ROLLBACK;
-    RESIGNAL;
-  END;
-
-  START TRANSACTION;
-    -- fetch PO's amount & activity
-    SELECT ActivityId, Amount
-      INTO v_ActivityId, v_POAmount
-    FROM PurchaseOrder
-    WHERE POId = p_POId
-    FOR UPDATE;
-
-    -- check activity funds
-    SELECT FundsAvailable
-      INTO v_FundsAvail
-    FROM LabActivity
-    WHERE ActivityId = v_ActivityId
-    FOR UPDATE;
-
-    IF v_POAmount > v_FundsAvail THEN
-      -- insufficient funds: reject this PO
-      UPDATE PurchaseOrder
-        SET POStatus='Rejected',
-            DateModified=NOW()
-      WHERE POId = p_POId;
-    ELSEIF v_POAmount <= v_FundsAvail THEN
-      -- sufficient funds: approve this PO
-      UPDATE PurchaseOrder
-        SET POStatus='Approved',
-            DateModified=NOW()
-      WHERE POId = p_POId;
-
-      UPDATE LabActivity
-        SET FundsAvailable = FundsAvailable - v_POAmount
-      WHERE ActivityId = v_ActivityId;
-    END IF;
-
-  COMMIT;
-END$$
-
--- approve_request procedure
-CREATE PROCEDURE sp_approve_request (IN p_RequestId INT, OUT p_HasMissing INT)
-BEGIN
-    DECLARE v_missing_count      INT DEFAULT 0;
-    DECLARE v_insufficient_count INT DEFAULT 0;
-
-    /*  Roll back everything if *anything* goes wrong  */
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        ROLLBACK;
-        RESIGNAL;
-    END;
-
-    START TRANSACTION;
-
-    /* ------------------ 1) any item missing in the lab? ------------------ */
-    SELECT COUNT(*)
-      INTO v_missing_count
-      FROM RequestItem  ri
-      JOIN `Request`    r   USING (RequestId)
-      JOIN LabActivity  la  USING (ActivityId)
-      LEFT JOIN Asset   a
-             ON  a.ItemId = ri.ItemId
-             AND a.LabId  = la.LabId
-     WHERE ri.RequestId = p_RequestId
-       AND a.AssetId IS NULL;
-
-    /* -------- 2) any item requested in quantity greater than stock? ------ */
-    IF v_missing_count = 0 THEN     -- do step‑2 only when step‑1 passed
-        SELECT COUNT(*)
-          INTO v_insufficient_count
-          FROM (
-                SELECT ri.ItemId,
-                       SUM(IFNULL(a.QuantityAvailable,0)) AS AvailQty,
-                       ri.QuantityRequested                AS ReqQty
-                  FROM RequestItem  ri
-                  JOIN `Request`    r   USING (RequestId)
-                  JOIN LabActivity  la  USING (ActivityId)
-                  JOIN Asset        a
-                         ON  a.ItemId = ri.ItemId
-                         AND a.LabId  = la.LabId
-                 WHERE ri.RequestId = p_RequestId
-                 GROUP BY ri.ItemId, ri.QuantityRequested
-                 HAVING AvailQty < ri.QuantityRequested
-               ) AS subq;
-    END IF;
-
-    /* -------- 3) decide the final status in ONE place -------------------- */
-    IF v_missing_count  > 0
-       OR v_insufficient_count > 0
-    THEN
-        
-    ELSE
-        UPDATE `Request`
-           SET RequestStatus = 'Approved',
-               DateModified  = NOW()
-         WHERE RequestId = p_RequestId;
-    END IF;
-
-    /* set OUT parameter: 1 if any missing, else 0 */
-    SET p_HasMissing = IF(v_missing_count > 0, 1, 0);
-
-    COMMIT;        -- all done
-
-    
-END $$
-
--- close_activity procedure
-CREATE PROCEDURE sp_close_activity(
-  IN p_ActivityId INT
-)
-BEGIN
-  DECLARE v_LabId      INT;
-  DECLARE v_FundsAvail FLOAT;
-
-  DECLARE EXIT HANDLER FOR SQLEXCEPTION
-  BEGIN
-    ROLLBACK;
-    RESIGNAL;
-  END;
-
-  START TRANSACTION;
-    -- fetch lab and remaining funds for this activity
-    SELECT LabId, FundsAvailable
-      INTO v_LabId, v_FundsAvail
-    FROM LabActivity
-    WHERE ActivityId = p_ActivityId
-    FOR UPDATE;
-
-    -- refund leftover funds back to the lab
-    UPDATE Lab
-      SET FundsAvailable = FundsAvailable + v_FundsAvail,
-          RecentActionTaken = 'Refunded Funds from Activity'
-    WHERE LabId = v_LabId;
-
-    -- close the activity
-    UPDATE LabActivity
-      SET FundsAvailable = 0,
-          IsClosed       = TRUE,
-          DateModified   = NOW()
-    WHERE ActivityId = p_ActivityId;
-  COMMIT;
-END$$
-
--- create_asset procedure
--- example usage:
--- CALL sp_create_asset(1, 3, 'SN-0001', 10, 'Shelf A', 'New Microscope');
-
-CREATE PROCEDURE sp_create_asset(
-  IN p_LabId             INT,
-  IN p_ItemId            INT,
-  IN p_SerialNo          VARCHAR(20),
-  IN p_QuantityAvailable INT,
-  IN p_StorageLocation   VARCHAR(100),
-  IN p_ShortDescription  VARCHAR(100)
-)
-BEGIN
-  START TRANSACTION;
-    INSERT INTO Asset
-      (LabId, ItemId, SerialNo, QuantityAvailable, StorageLocation, ShortDescription)
-    VALUES
-      (p_LabId, p_ItemId, p_SerialNo, p_QuantityAvailable, p_StorageLocation, p_ShortDescription);
-  COMMIT;
-END$$
-
--- create_item procedure
--- To invoke from mysql> prompt:
--- CALL sp_create_item(
---   'Camera',       -- p_Category
---   'Canon',        -- p_Make
---   'EOS 1500D',    -- p_Model
---   24,             -- p_WarrantyMonths
---   'DSLR camera',  -- p_ItemDescription
---   1,              -- p_CreatedByUserId
---   TRUE            -- p_IsActive
--- );
-
-CREATE PROCEDURE sp_create_item(
-  IN p_Category           VARCHAR(50),
-  IN p_Make               VARCHAR(100),
-  IN p_Model              VARCHAR(100),
-  IN p_WarrantyMonths     INT,
-  IN p_ItemDescription    VARCHAR(255),
-  IN p_CreatedByUserId    INT,
-  IN p_IsActive           BOOLEAN
-)
-BEGIN
-  START TRANSACTION;
-    INSERT INTO Item
-      (Category
-      ,Make
-      ,Model
-      ,WarrantyPeriodMonths
-      ,ItemDescription
-      ,CreatedBy
-      ,DateCreated
-      ,IsActive)
-    VALUES
-      (p_Category
-      ,p_Make
-      ,p_Model
-      ,p_WarrantyMonths
-      ,p_ItemDescription
-      ,p_CreatedByUserId
-      ,NOW()
-      ,p_IsActive);
-  COMMIT;
-END$$
-
--- create_lab_activity procedure
--- To invoke:
--- CALL sp_create_lab_activity(
---   1,            -- LabId
---   5,            -- InitiatorId
---   'Research',   -- Type
---   'Desc here',  -- Description
---   5000.00,      -- InitialFunds
---   NOW(),        -- StartDate
---   NULL,         -- EndDate
---   FALSE         -- IsClosed
--- );
-
-CREATE PROCEDURE sp_create_lab_activity(
+CREATE PROCEDURE sp_create_activity(
   IN p_LabId          INT,
   IN p_InitiatorId    INT,
   IN p_Type           VARCHAR(20),
@@ -442,40 +171,41 @@ BEGIN
   COMMIT;
 END$$
 
--- create_purchase procedure
--- To invoke:
--- CALL sp_create_purchase(<ActivityId>, <Amount>);
-
-CREATE PROCEDURE sp_create_purchase(
-  IN p_ActivityId INT,
-  IN p_Amount     FLOAT
+CREATE PROCEDURE sp_allocate_funds_to_activity(
+  IN p_LabId       INT,
+  IN p_ActivityId  INT,
+  IN p_Amount      FLOAT
 )
 BEGIN
+  DECLARE v_FundsAvail FLOAT;
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
     ROLLBACK;
     RESIGNAL;
   END;
+ 
+  SELECT FundsAvailable
+    INTO v_FundsAvail
+  FROM Lab
+  WHERE LabId = p_LabId
+  FOR UPDATE;
 
-  START TRANSACTION;
-    INSERT INTO PurchaseOrder
-      (ActivityId, OrderDate, Amount, POStatus)
-    VALUES
-      (p_ActivityId, NOW(), p_Amount, 'Generated');
-  COMMIT;
-END$$
+  IF v_FundsAvail < p_Amount THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Insufficient funds for allocation';
+  ELSEIF v_FundsAvail >= p_Amount THEN
+    START TRANSACTION;
+    UPDATE Lab
+      SET FundsAvailable = FundsAvailable - p_Amount,
+          RecentActionTaken = 'Allocated'
+    WHERE LabId = p_LabId;
 
--- deactivate_user procedure
-CREATE PROCEDURE sp_deactivate_user(
-  IN p_UserId INT
-)
-BEGIN
-  START TRANSACTION;
-    UPDATE Users
-      SET IsActive     = FALSE,
-          DateModified = NOW()
-    WHERE UserId = p_UserId;
-  COMMIT;
+    UPDATE LabActivity
+      SET FundsAvailable = FundsAvailable + p_Amount
+    WHERE ActivityId = p_ActivityId;
+    COMMIT;
+  END IF;
+  
 END$$
 
 -- issue_assets procedure
@@ -500,6 +230,44 @@ BEGIN
   COMMIT;
 END$$
 
+-- create_item procedure
+CREATE PROCEDURE sp_create_item(
+    IN p_Category VARCHAR(20),
+    IN p_Make VARCHAR(100),
+    IN p_Model VARCHAR(100),
+    IN p_WarrantyPeriodMonths INT,
+    IN p_ItemDescription VARCHAR(100),
+    IN p_CreatedBy INT
+  )
+  BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+      ROLLBACK;
+      RESIGNAL;
+    END;
+
+    START TRANSACTION;
+      INSERT INTO Item (
+        Category,
+        Make,
+        Model,
+        WarrantyPeriodMonths,
+        ItemDescription,
+        CreatedBy,
+        IsActive
+      )
+      VALUES (
+        p_Category,
+        p_Make,
+        p_Model,
+        p_WarrantyPeriodMonths,
+        p_ItemDescription,
+        p_CreatedBy,
+        TRUE
+      );
+    COMMIT;
+END$$
+
 -- raise_request procedure
 CREATE PROCEDURE sp_raise_request(
   IN p_ActivityId  INT,
@@ -510,7 +278,143 @@ BEGIN
     INSERT INTO Request  
       (ActivityID, RequestDate, Requestor, RequestStatus)  
     VALUES  
-      (p_ActivityId, NOW(), p_Requestor, 'Generated');
+      (p_ActivityId, NOW(), p_Requestor, 'Pending');
+  COMMIT;
+END$$
+
+-- create_request_item procedure
+CREATE PROCEDURE sp_approve_request(
+  IN p_RequestId INT,
+  IN p_Approve BOOLEAN
+)
+BEGIN
+  DECLARE v_RequestStatus VARCHAR(20);
+  DECLARE v_DateApproved DATETIME DEFAULT NULL;
+  DECLARE v_DateRejected DATETIME DEFAULT NULL;
+  DECLARE v_CurrentStatus VARCHAR(20);
+
+  -- Check if the request id is valid and if its status is still pending
+  SELECT RequestStatus INTO v_CurrentStatus
+  FROM Request
+  WHERE RequestId = p_RequestId;
+
+  IF v_CurrentStatus <> 'Pending' THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'The request is already completed and cannot be updated';
+  END IF;
+
+  IF p_Approve THEN
+    SET v_RequestStatus = 'Approved';
+    SET v_DateApproved = NOW();
+  ELSE
+    SET v_RequestStatus = 'Rejected';
+    SET v_DateRejected = NOW();
+  END IF;
+
+  START TRANSACTION;
+    UPDATE Request
+      SET RequestStatus = v_RequestStatus,
+          DateApproved = v_DateApproved,
+          DateRejected = v_DateRejected
+    WHERE RequestId = p_RequestId;
+  COMMIT;
+END$$
+
+CREATE PROCEDURE sp_create_PO(
+  IN p_ActivityId INT,
+  IN p_Amount     FLOAT,
+  OUT p_POId      INT
+)
+BEGIN
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+    INSERT INTO PurchaseOrder
+      (ActivityId, OrderDate, Amount, POStatus)
+    VALUES
+      (p_ActivityId, NOW(), p_Amount, 'Generated');
+
+    SET p_POId = LAST_INSERT_ID();
+  COMMIT;
+END$$
+
+
+CREATE PROCEDURE sp_log_PO_item(
+  IN p_POId INT,
+  IN p_ItemId INT,
+  IN p_QuantityOrdered INT,
+  IN p_CostPerUnit FLOAT
+)
+BEGIN
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+    INSERT INTO POItem (POId, ItemId, QuantityOrdered, CostPerUnit)
+    VALUES (p_POId, p_ItemId, p_QuantityOrdered, p_CostPerUnit);
+  COMMIT;
+END$$
+
+CREATE PROCEDURE sp_approve_PO(
+  IN p_POId INT
+)
+BEGIN
+  DECLARE v_ActivityId  INT;
+  DECLARE v_POAmount    FLOAT;
+  DECLARE v_FundsAvail  FLOAT;
+  DECLARE v_POStatus    VARCHAR(20);
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+    -- Validate that the PO exists and is not already approved/rejected
+    SELECT POStatus, ActivityId, Amount
+      INTO v_POStatus, v_ActivityId, v_POAmount
+    FROM PurchaseOrder
+    WHERE POId = p_POId
+    FOR UPDATE;
+
+    IF v_POStatus <> 'Pending' THEN
+      SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'PO is already completed or invalid';
+    END IF;
+
+    -- Check funds available for the related activity
+    SELECT FundsAvailable
+      INTO v_FundsAvail
+    FROM LabActivity
+    WHERE ActivityId = v_ActivityId
+    FOR UPDATE;
+
+    IF v_POAmount > v_FundsAvail THEN
+      -- Insufficient funds: reject PO
+      UPDATE PurchaseOrder
+        SET POStatus = 'Rejected',
+            DateModified = NOW()
+      WHERE POId = p_POId;
+    ELSE
+      -- Sufficient funds: approve PO and update activity funds
+      UPDATE PurchaseOrder
+        SET POStatus = 'Approved',
+            DateModified = NOW()
+      WHERE POId = p_POId;
+
+      UPDATE LabActivity
+        SET FundsAvailable = FundsAvailable - v_POAmount
+      WHERE ActivityId = v_ActivityId;
+    END IF;
+
   COMMIT;
 END$$
 
@@ -522,29 +426,69 @@ CREATE PROCEDURE sp_receive_items(
 )
 BEGIN
   START TRANSACTION;
-    -- 1) mark PO received
-    UPDATE PurchaseOrder  
-      SET POStatus='Received', DateModified=NOW()  
-    WHERE POId = p_POId;
-
-    -- 2) for each POItem, insert into Asset
+    -- 1) for each POItem, insert into Asset or update existing record by incrementing QuantityAvailable
     INSERT INTO Asset (LabId, ItemId, SerialNo, QuantityAvailable, StorageLocation, ShortDescription)  
-    SELECT L.LabId, PI.ItemId, CONCAT('PO',p_POId,'-',PI.POItemId),
+    SELECT L.LabId, PI.ItemId, CONCAT('PO', p_POId, '-', PI.POItemId),
            PI.QuantityOrdered, p_StorageLoc, p_ShortDesc
     FROM POItem PI  
     JOIN PurchaseOrder PO USING (POId)  
-    JOIN LabActivity LA ON LA.ActivityId=PO.ActivityId  
-    JOIN Lab L ON L.LabId=LA.LabId  
-    WHERE PI.POId = p_POId;
+    JOIN LabActivity LA ON LA.ActivityId = PO.ActivityId  
+    JOIN Lab L ON L.LabId = LA.LabId  
+    WHERE PI.POId = p_POId
+    ON DUPLICATE KEY UPDATE QuantityAvailable = QuantityAvailable + VALUES(QuantityAvailable);
 
-    -- 3) close the PO
+    -- 2) close the PO
     UPDATE PurchaseOrder  
-      SET POStatus='Closed', DateModified=NOW()  
+      SET POStatus = 'Closed', DateModified = NOW()  
     WHERE POId = p_POId;
   COMMIT;
 END$$
 
--- return_assets procedure
+-- close_request procedure
+CREATE PROCEDURE sp_close_request(
+  IN p_RequestId INT
+)
+BEGIN
+  DECLARE v_ActivityId INT;
+  DECLARE v_AssetId INT;
+  DECLARE v_ReqQuantity INT;
+  DECLARE v_StockQuantity INT;
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+    -- Fetch activity ID, the asset being requested, and the required quantity
+    SELECT ActivityId, AssetId, RequestedQuantity
+      INTO v_ActivityId, v_AssetId, v_ReqQuantity
+    FROM Request
+    WHERE RequestId = p_RequestId
+    FOR UPDATE;
+
+    -- Check if sufficient quantity is available in the asset stock
+    SELECT QuantityAvailable
+      INTO v_StockQuantity
+    FROM Asset
+    WHERE AssetId = v_AssetId
+    FOR UPDATE;
+
+    IF v_StockQuantity < v_ReqQuantity THEN
+      SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient asset stock to close the request';
+    END IF;
+
+    -- Close the request only if sufficient stock is available
+    UPDATE Request
+      SET RequestStatus = 'Closed',
+          DateModified   = NOW()
+    WHERE RequestId = p_RequestId;
+    
+  COMMIT;
+END$$
+
 CREATE PROCEDURE sp_return_assets(
   IN p_ActivityId     INT,
   IN p_AssetId        INT,
@@ -564,6 +508,155 @@ BEGIN
       SET QuantityAvailable = QuantityAvailable + p_Quantity  
     WHERE AssetId = p_AssetId;
   COMMIT;
+END$$
+
+
+CREATE PROCEDURE sp_deallocate_funds_from_activity(
+  IN p_LabId INT,
+  IN p_ActivityId INT,
+  IN p_Amount FLOAT
+)
+BEGIN
+  DECLARE v_ActivityFunds FLOAT;
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+  ROLLBACK;
+  RESIGNAL;
+  END;
+
+  START TRANSACTION;
+  SELECT FundsAvailable
+    INTO v_ActivityFunds
+  FROM LabActivity
+  WHERE ActivityId = p_ActivityId
+  FOR UPDATE;
+
+  IF v_ActivityFunds < p_Amount THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Insufficient funds in the activity for deallocation';
+  END IF;
+
+  UPDATE LabActivity
+    SET FundsAvailable = FundsAvailable - p_Amount
+  WHERE ActivityId = p_ActivityId;
+
+  UPDATE Lab
+    SET FundsAvailable = FundsAvailable + p_Amount,
+      RecentActionTaken = 'Refunded'
+  WHERE LabId = p_LabId;
+  COMMIT;
+END$$
+
+
+CREATE PROCEDURE sp_destroy_asset(
+  IN p_AssetId INT,
+  IN p_Quantity INT,
+  IN p_ProcessedBy INT,
+  IN p_ShortDesc VARCHAR(100)
+)
+BEGIN
+  DECLARE v_QuantityAvailable INT;
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+    SELECT QuantityAvailable
+      INTO v_QuantityAvailable
+    FROM Asset
+    WHERE AssetId = p_AssetId
+    FOR UPDATE;
+
+    IF v_QuantityAvailable < p_Quantity THEN
+      SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient asset quantity to destroy';
+    END IF;
+
+    UPDATE Asset
+      SET QuantityAvailable = QuantityAvailable - p_Quantity
+    WHERE AssetId = p_AssetId;
+
+    INSERT INTO AssetTransactionLog (AssetId, ActionTakenBy, TransactionAction, Quantity, ShortDescription)
+    VALUES (p_AssetId, p_ProcessedBy, 'Destroyed', p_Quantity, p_ShortDesc);
+  COMMIT;
+END$$
+
+CREATE PROCEDURE sp_close_activity(
+  IN p_ActivityId INT
+)
+BEGIN
+  DECLARE v_LabId INT;
+  DECLARE v_FundsAvail FLOAT;
+  
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+
+  START TRANSACTION;
+    -- Refund remaining funds from the activity back to the lab
+    SELECT LabId, FundsAvailable
+      INTO v_LabId, v_FundsAvail
+    FROM LabActivity
+    WHERE ActivityId = p_ActivityId
+    FOR UPDATE;
+    
+    UPDATE Lab
+      SET FundsAvailable = FundsAvailable + v_FundsAvail,
+          RecentActionTaken = 'Refunded'
+    WHERE LabId = v_LabId;
+    
+    -- Close the activity: reset funds and update the isClosed flag
+    UPDATE LabActivity
+      SET FundsAvailable = 0,
+          IsClosed = TRUE
+    WHERE ActivityId = p_ActivityId;
+
+    -- Return all issued assets: add back quantities to Asset and mark transactions as returned
+    UPDATE Asset A
+      JOIN (
+        SELECT AssetId, SUM(Quantity) AS TotalIssued
+        FROM ActivityItemTransaction
+        WHERE ActivityId = p_ActivityId AND ActionTaken = 'Issued'
+        GROUP BY AssetId
+      ) AS T ON A.AssetId = T.AssetId
+      SET A.QuantityAvailable = A.QuantityAvailable + T.TotalIssued;
+
+    UPDATE ActivityItemTransaction
+      SET ActionTaken = 'Returned'
+    WHERE ActivityId = p_ActivityId
+      AND ActionTaken = 'Issued';
+      
+  COMMIT;
+END$$
+
+CREATE PROCEDURE sp_get_asset_quantity(
+  IN p_AssetId INT,
+  IN p_LabId INT,
+  OUT p_Quantity INT
+)
+BEGIN
+  SELECT QuantityAvailable
+    INTO p_Quantity
+  FROM Asset
+  WHERE AssetId = p_AssetId
+    AND LabId = p_LabId;
+END$$
+
+CREATE PROCEDURE sp_get_lab_funds(
+  IN p_LabId INT,
+  OUT p_TotalFunds FLOAT
+)
+BEGIN
+  SELECT FundsAvailable
+    INTO p_TotalFunds
+  FROM Lab
+  WHERE LabId = p_LabId;
 END$$
 
 DELIMITER ;

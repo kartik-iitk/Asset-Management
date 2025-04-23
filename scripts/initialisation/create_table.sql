@@ -201,7 +201,7 @@ CREATE TABLE Request (
   ActivityID    INT,
   RequestDate   DATETIME,
   Requestor     INT,
-  RequestStatus VARCHAR(50), -- Pending, Approved, Rejected
+  RequestStatus VARCHAR(50), -- Pending, Approved, Rejected, Closed
   ItemId             INT,
   QuantityRequested  INT,
   -- IsUnknown          BOOLEAN,
@@ -227,7 +227,7 @@ CREATE TABLE RequestLog (
   RequestLogId     INT AUTO_INCREMENT PRIMARY KEY,
   RequestId        INT,
   ActionTakenBy    VARCHAR(100),     -- was INT
-  RequestStatus    VARCHAR(50),       -- Pending, Approved, Rejected
+  RequestStatus    VARCHAR(50),       -- Pending, Approved, Rejected, Closed
   RequestDescription VARCHAR(100),
   DateCreated      DATETIME DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_ril_RequestId FOREIGN KEY (RequestId) REFERENCES Request(RequestId)
@@ -286,7 +286,7 @@ CREATE TABLE AssetTransactionLog (
   TransactionId     INT AUTO_INCREMENT PRIMARY KEY,
   AssetId           INT,
   ActionTakenBy     VARCHAR(100),    -- was INT
-  TransactionAction VARCHAR(50),
+  TransactionAction VARCHAR(50),    -- Added, Issued, Returned, Destroyed
   Quantity          INT,
   ShortDescription  VARCHAR(100),
   DateCreated       DATETIME DEFAULT CURRENT_TIMESTAMP,
