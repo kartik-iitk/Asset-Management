@@ -58,8 +58,7 @@ BEGIN
       Email, 
       Contact, 
       UserAddress, 
-      IsActive, 
-      DateCreated
+      IsActive
     ) VALUES (
       p_Username, 
       p_Password, 
@@ -72,27 +71,26 @@ BEGIN
       p_Email, 
       p_Contact, 
       p_UserAddress, 
-      True, 
-      NOW()
+      True
     );
 
     -- Get the auto-generated user ID
-    SET v_UserId = LAST_INSERT_ID();
-
-    SELECT LabId, DeptID 
-    INTO v_LabId, v_DeptId 
-    FROM Lab 
-    WHERE LabName = p_LabName
-    AND IsActive = 1;
+	SET v_UserId = LAST_INSERT_ID();
 
     SELECT RoleId INTO v_RoleId
     FROM Roles 
     WHERE RoleName = p_RoleName
     AND IsActive = 1; 
 
+	SELECT LabId, DeptID 
+    INTO v_LabId, v_DeptId 
+    FROM Lab 
+    WHERE LabName = p_LabName
+    AND IsActive = 1;
+    
     -- Assign the role to the user
     INSERT INTO UserRole (UserId, DeptId, LabId, RoleId, DateJoined, IsActive)
-    VALUES (v_UserId, v_DeptId, v_LabId, v_RoleId, NOW());
+    VALUES (v_UserId, v_DeptId, v_LabId, v_RoleId, NOW(), True);
     
   COMMIT;
 END$$
