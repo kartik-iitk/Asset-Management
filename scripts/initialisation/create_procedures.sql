@@ -151,6 +151,7 @@ BEGIN
   
 END$$
 
+
 -- approve_po procedure
 CREATE PROCEDURE sp_approve_po(
   IN p_POId INT
@@ -203,7 +204,7 @@ BEGIN
 END$$
 
 -- approve_request procedure
-CREATE PROCEDURE sp_approve_request (IN p_RequestId INT)
+CREATE PROCEDURE sp_approve_request (IN p_RequestId INT, OUT p_HasMissing INT)
 BEGIN
     DECLARE v_missing_count      INT DEFAULT 0;
     DECLARE v_insufficient_count INT DEFAULT 0;
@@ -253,10 +254,7 @@ BEGIN
     IF v_missing_count  > 0
        OR v_insufficient_count > 0
     THEN
-        UPDATE `Request`
-           SET RequestStatus = 'Rejected',
-               DateModified  = NOW()
-         WHERE RequestId = p_RequestId;
+        
     ELSE
         UPDATE `Request`
            SET RequestStatus = 'Approved',
@@ -264,7 +262,12 @@ BEGIN
          WHERE RequestId = p_RequestId;
     END IF;
 
+    /* set OUT parameter: 1 if any missing, else 0 */
+    SET p_HasMissing = IF(v_missing_count > 0, 1, 0);
+
     COMMIT;        -- all done
+
+    
 END $$
 
 -- close_activity procedure

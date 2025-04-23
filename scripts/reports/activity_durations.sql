@@ -5,5 +5,5 @@ SELECT
   TIMESTAMPDIFF(DAY,LA.StartDate,LA.EndDate) AS DurationDays  
 FROM LabActivity LA  
 WHERE LA.IsClosed=TRUE  
-ORDER BY DurationDays DESC  
+ORDER BY LA.EndDate DESC  
 LIMIT 10;
