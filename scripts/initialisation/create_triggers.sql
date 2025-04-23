@@ -29,11 +29,23 @@ CREATE TRIGGER trg_asset_after_update
 AFTER UPDATE ON Asset
 FOR EACH ROW
 BEGIN
-  INSERT INTO AssetTransactionLog
-    (AssetId, ActionTakenBy, TransactionAction, Quantity, ShortDescription)
-  VALUES
-    (NEW.AssetId, USER(), 'Issued', NEW.QuantityAvailable - OLD.QuantityAvailable,
-     'Asset details modified');
+  DECLARE qty_change INT;
+  SET qty_change = NEW.QuantityAvailable - OLD.QuantityAvailable;
+  
+  IF qty_change < 0 THEN
+    INSERT INTO AssetTransactionLog
+      (AssetId, ActionTakenBy, TransactionAction, Quantity, ShortDescription)
+    VALUES
+      (NEW.AssetId, USER(), 'Issued', ABS(qty_change),
+       'Asset issued');
+       -- Destroyed ??
+  ELSEIF qty_change > 0 THEN
+    INSERT INTO AssetTransactionLog
+      (AssetId, ActionTakenBy, TransactionAction, Quantity, ShortDescription)
+    VALUES
+      (NEW.AssetId, USER(), 'Returned', qty_change,
+       'Asset returned');
+  END IF;
 END$$
 
 -- LabActivity triggers
@@ -52,18 +64,31 @@ CREATE TRIGGER trg_labactivity_after_update
 AFTER UPDATE ON LabActivity
 FOR EACH ROW
 BEGIN
+  DECLARE labAction VARCHAR(20);
   DECLARE delta FLOAT;
+  
+  -- Retrieve the recent action taken from the Lab table
+  SELECT RecentActionTaken INTO labAction
+    FROM Lab
+   WHERE LabId = NEW.LabId;
+  
   SET delta = NEW.FundsAvailable - OLD.FundsAvailable;
-  IF delta > 0 THEN
+  
+  IF labAction = 'Added' THEN
     INSERT INTO LabActivityLog
       (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
     VALUES
-      (NEW.ActivityId, USER(), 'Added', 'Funds Allocated', delta);
-  ELSEIF delta < 0 THEN
+      (NEW.ActivityId, USER(), 'Added', 'Funds Added', delta);
+  ELSEIF labAction = 'Spent' THEN
     INSERT INTO LabActivityLog
       (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
     VALUES
-      (NEW.ActivityId, USER(), 'Spent', 'Funds Used', -delta);
+      (NEW.ActivityId, USER(), 'Spent', 'Funds Spent', ABS(delta));
+  ELSEIF labAction = 'Refunded' THEN
+    INSERT INTO LabActivityLog
+      (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
+    VALUES
+      (NEW.ActivityId, USER(), 'Refunded', 'Funds Refunded', delta);
   END IF;
 END$$
 
@@ -82,18 +107,30 @@ CREATE TRIGGER trg_lab_after_update
 AFTER UPDATE ON Lab
 FOR EACH ROW
 BEGIN
+  DECLARE labAction VARCHAR(20);
   DECLARE delta FLOAT;
+  
+  SELECT RecentActionTaken INTO labAction
+    FROM Lab
+   WHERE LabId = NEW.LabId;
+  
   SET delta = NEW.FundsAvailable - OLD.FundsAvailable;
-  IF delta > 0 THEN
+  
+  IF labAction = 'Added' THEN
     INSERT INTO LabLog
       (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
     VALUES
-      (NEW.LabId, USER(), 'Added', 'Funds Allocated', delta);
-  ELSEIF delta < 0 THEN
+      (NEW.LabId, USER(), 'Added', 'Funds Added', delta);
+  ELSEIF labAction = 'Allocated' THEN
     INSERT INTO LabLog
       (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
     VALUES
-      (NEW.LabId, USER(), 'Spent', 'Funds Used', -delta);
+      (NEW.LabId, USER(), 'Allocated', 'Funds Allocated', ABS(delta));
+  ELSEIF labAction = 'Refunded' THEN
+    INSERT INTO LabLog
+      (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
+    VALUES
+      (NEW.LabId, USER(), 'Refunded', 'Funds Refunded', delta);
   END IF;
 END$$
 
@@ -116,10 +153,27 @@ AFTER UPDATE ON PurchaseOrder
 FOR EACH ROW
 BEGIN
   IF OLD.POStatus <> NEW.POStatus THEN
-    INSERT INTO POLog
-      (POId, POCreatedBy, POStatus, POStatusDescription)
-    VALUES
-      (NEW.POId, USER(), NEW.POStatus, CONCAT('Status changed from ',OLD.POStatus,' to ',NEW.POStatus));
+    IF NEW.POStatus = 'Pending' THEN
+      INSERT INTO POLog
+        (POId, POCreatedBy, POStatus, POStatusDescription)
+      VALUES
+        (NEW.POId, USER(), NEW.POStatus, CONCAT('Status changed from ', OLD.POStatus, ' to Pending'));
+    ELSEIF NEW.POStatus = 'Approved' THEN
+      INSERT INTO POLog
+        (POId, POCreatedBy, POStatus, POStatusDescription)
+      VALUES
+        (NEW.POId, USER(), NEW.POStatus, CONCAT('Status changed from ', OLD.POStatus, ' to Approved'));
+    ELSEIF NEW.POStatus = 'Rejected' THEN
+      INSERT INTO POLog
+        (POId, POCreatedBy, POStatus, POStatusDescription)
+      VALUES
+        (NEW.POId, USER(), NEW.POStatus, CONCAT('Status changed from ', OLD.POStatus, ' to Rejected'));
+    ELSEIF NEW.POStatus = 'Closed' THEN
+      INSERT INTO POLog
+        (POId, POCreatedBy, POStatus, POStatusDescription)
+      VALUES
+        (NEW.POId, USER(), NEW.POStatus, CONCAT('Status changed from ', OLD.POStatus, ' to Closed'));
+    END IF;
   END IF;
 END$$
 
@@ -139,10 +193,27 @@ AFTER UPDATE ON Request
 FOR EACH ROW
 BEGIN
   IF OLD.RequestStatus <> NEW.RequestStatus THEN
-    INSERT INTO RequestLog
-      (RequestId, ActionTakenBy, RequestStatus, RequestDescription)
-    VALUES
-      (NEW.RequestId, USER(), NEW.RequestStatus, CONCAT('Status changed from ',OLD.RequestStatus,' to ',NEW.RequestStatus));
+    IF NEW.RequestStatus = 'Pending' THEN
+      INSERT INTO RequestLog
+        (RequestId, ActionTakenBy, RequestStatus, RequestDescription)
+      VALUES
+        (NEW.RequestId, USER(), NEW.RequestStatus, CONCAT('Status changed from ', OLD.RequestStatus, ' to Pending'));
+    ELSEIF NEW.RequestStatus = 'Approved' THEN
+      INSERT INTO RequestLog
+        (RequestId, ActionTakenBy, RequestStatus, RequestDescription)
+      VALUES
+        (NEW.RequestId, USER(), NEW.RequestStatus, CONCAT('Status changed from ', OLD.RequestStatus, ' to Approved'));
+    ELSEIF NEW.RequestStatus = 'Rejected' THEN
+      INSERT INTO RequestLog
+        (RequestId, ActionTakenBy, RequestStatus, RequestDescription)
+      VALUES
+        (NEW.RequestId, USER(), NEW.RequestStatus, CONCAT('Status changed from ', OLD.RequestStatus, ' to Rejected'));
+    ELSEIF NEW.RequestStatus = 'Closed' THEN
+      INSERT INTO RequestLog
+        (RequestId, ActionTakenBy, RequestStatus, RequestDescription)
+      VALUES
+        (NEW.RequestId, USER(), NEW.RequestStatus, CONCAT('Status changed from ', OLD.RequestStatus, ' to Closed'));
+    END IF;
   END IF;
 END$$
 
