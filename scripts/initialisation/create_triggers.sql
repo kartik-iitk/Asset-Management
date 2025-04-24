@@ -133,7 +133,7 @@ BEGIN
       (NEW.LabId, USER(), 'Allocated', 'Funds Allocated', ABS(delta));
   ELSEIF labAction = 'Refunded' THEN
     INSERT INTO LabLog
-      (LabId, ActionTakenBy, ActionTaken, ActionDescription, ABS(Amount))
+      (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
     VALUES
       (NEW.LabId, USER(), 'Refunded', 'Funds Refunded', ABS(delta));
   END IF;

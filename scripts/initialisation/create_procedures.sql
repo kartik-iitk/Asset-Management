@@ -161,15 +161,35 @@ CREATE PROCEDURE sp_create_activity(
   IN p_IsClosed       BOOLEAN
 )
 BEGIN
-  START TRANSACTION;
+  DECLARE v_FundsAvail FLOAT;
+ 
+  SELECT FundsAvailable
+    INTO v_FundsAvail
+  FROM Lab
+  WHERE LabId = p_LabId
+  FOR UPDATE;
+
+  IF v_FundsAvail < p_InitialFunds THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Insufficient funds for allocation';
+  ELSEIF v_FundsAvail >= p_InitialFunds THEN
+    START TRANSACTION;
+    UPDATE Lab
+      SET FundsAvailable = FundsAvailable - p_InitialFunds,
+          RecentActionTaken = 'Allocated'
+    WHERE LabId = p_LabId;
+
     INSERT INTO LabActivity
       (LabId, InitiatorId, ActivityType, ActivityDescription,
        FundsAvailable, StartDate, EndDate, IsClosed, DateCreated)
     VALUES
       (p_LabId, p_InitiatorId, p_Type, p_Description,
        p_InitialFunds, p_StartDate, p_EndDate, p_IsClosed, NOW());
-  COMMIT;
+    COMMIT;
+  END IF;
+
 END$$
+
 
 CREATE PROCEDURE sp_allocate_funds_to_activity(
   IN p_LabId       INT,
