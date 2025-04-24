@@ -64,36 +64,34 @@ CREATE TRIGGER trg_labactivity_after_update
 AFTER UPDATE ON LabActivity
 FOR EACH ROW
 BEGIN
-  DECLARE labAction VARCHAR(20);
   DECLARE delta FLOAT;
-  
-  -- Retrieve the recent action taken from the Lab table
-  SELECT RecentActionTaken INTO labAction
-    FROM Lab
-   WHERE LabId = NEW.LabId;
+  DECLARE labRecent VARCHAR(20);
   
   SET delta = NEW.FundsAvailable - OLD.FundsAvailable;
   
-  IF labAction = 'Added' THEN
+  IF delta < 0 THEN
+    SELECT RecentActionTaken 
+    INTO labRecent 
+    FROM Lab 
+    WHERE LabId = NEW.LabId 
+    FOR UPDATE;
+    
+    IF labRecent = 'Refunded' THEN
+      INSERT INTO LabActivityLog
+        (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
+      VALUES
+        (NEW.ActivityId, USER(), 'Refunded', 'Funds Refunded', ABS(delta));
+    ELSE
+      INSERT INTO LabActivityLog
+        (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
+      VALUES
+        (NEW.ActivityId, USER(), 'Spent', 'Funds Spent', ABS(delta));
+    END IF;
+  ELSEIF delta > 0 THEN
     INSERT INTO LabActivityLog
       (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
     VALUES
-      (NEW.ActivityId, USER(), 'Added', 'Funds Added', ABS(delta));
-  ELSEIF labAction = 'Spent' THEN
-    INSERT INTO LabActivityLog
-      (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
-    VALUES
-      (NEW.ActivityId, USER(), 'Spent', 'Funds Spent', ABS(delta));
-  ELSEIF labAction = 'Refunded' THEN
-    INSERT INTO LabActivityLog
-      (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
-    VALUES
-      (NEW.ActivityId, USER(), 'Refunded', 'Funds Refunded', ABS(delta));
-  ELSEIF labAction = 'Allocated' THEN
-    INSERT INTO LabActivityLog
-      (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
-    VALUES
-      (NEW.ActivityId, USER(), 'Allocated', 'Funds Allocated', ABS(delta));
+      (NEW.ActivityId, USER(), 'Added', 'Funds Added', delta);
   END IF;
 END$$
 
@@ -144,9 +142,6 @@ CREATE TRIGGER trg_po_after_insert
   AFTER INSERT ON PurchaseOrder
   FOR EACH ROW
 BEGIN
-  UPDATE LabActivity
-    SET FundsAvailable = FundsAvailable - NEW.Amount
-  WHERE ActivityId = NEW.ActivityId;
   INSERT INTO POLog
       (POId, POCreatedBy, POStatus, POStatusDescription)
     VALUES
