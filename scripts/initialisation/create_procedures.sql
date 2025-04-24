@@ -100,7 +100,7 @@ BEGIN
   COMMIT;
 END$$
 
-CREATE PROCEDURE sp_add_Lab(
+CREATE PROCEDURE sp_create_lab(
   IN p_DeptName      VARCHAR(50),
   IN p_LabName      VARCHAR(50),
   IN p_FundsAvailable   FLOAT
@@ -271,16 +271,19 @@ END$$
 -- raise_request procedure
 CREATE PROCEDURE sp_raise_request(
   IN p_ActivityId  INT,
-  IN p_Requestor   INT
+  IN p_Requestor   INT,
+  IN p_ItemId     INT,
+  IN p_Quantity   INT
 )
 BEGIN
   START TRANSACTION;
     INSERT INTO Request  
-      (ActivityID, RequestDate, Requestor, RequestStatus)  
+      (ActivityID, RequestDate, Requestor, RequestStatus, ItemId, QuantityRequested)
     VALUES  
-      (p_ActivityId, NOW(), p_Requestor, 'Pending');
+      (p_ActivityId, NOW(), p_Requestor, 'Pending', p_ItemId, p_Quantity);
   COMMIT;
 END$$
+
 
 -- create_request_item procedure
 CREATE PROCEDURE sp_approve_request(
@@ -313,9 +316,7 @@ BEGIN
 
   START TRANSACTION;
     UPDATE Request
-      SET RequestStatus = v_RequestStatus,
-          DateApproved = v_DateApproved,
-          DateRejected = v_DateRejected
+      SET RequestStatus = v_RequestStatus
     WHERE RequestId = p_RequestId;
   COMMIT;
 END$$
@@ -336,7 +337,7 @@ BEGIN
     INSERT INTO PurchaseOrder
       (ActivityId, OrderDate, Amount, POStatus)
     VALUES
-      (p_ActivityId, NOW(), p_Amount, 'Generated');
+      (p_ActivityId, NOW(), p_Amount, 'Pending');
 
     SET p_POId = LAST_INSERT_ID();
   COMMIT;

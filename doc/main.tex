@@ -2,16 +2,18 @@
 
 \usepackage{fullpage}
 \usepackage{graphicx}
+\usepackage{svg}
 \usepackage{times}
 \usepackage{url}
+\usepackage{rotating}
 
 \title{\bf Database Project}
 \author{
-	\bf Name 1 \qquad Roll 1 \qquad Email 1 \\
-	\bf Name 2 \qquad Roll 2 \qquad Email 2 \\
-	\bf Name 3 \qquad Roll 3 \qquad Email 3 \\
-	\bf Name 4 \qquad Roll 4 \qquad Email 4 \\
-	\bf Name 5 \qquad Roll 5 \qquad Email 5
+  \bf Kartik Anant Kulkarni \qquad 210493 \qquad \texttt{kartik21@iitk.ac.in} \\
+  \bf Sharvil Sachin Athaley \qquad 210961 \qquad \texttt{sharvilsa21@iitk.ac.in} \\
+  \bf Sanath Salampuria \qquad 210919 \qquad \texttt{sanaths21@iitk.ac.in} \\
+  \bf Samyak Singhania \qquad 210917 \qquad \texttt{samyaks21@iitk.ac.in} \\
+  \bf Raghav Shukla \qquad 210800 \qquad \texttt{raghavs21@iitk.ac.in}
 }
 \date{CS315 Final Project}
 
@@ -20,25 +22,168 @@
 \maketitle
 
 \begin{abstract}
-	Summary
+We present the design and implementation of an Asset Management and Inventory Management System to track labs, activities, funds, inventory, requests, and purchases. The solution includes a comprehensive schema, stored procedures, triggers, audit-log tables, and ad-hoc reporting queries.
 \end{abstract}
 
 \section{Motivation and Problem Statement}
+Various labs at IITK possess assets that are shared across users and labs. We aim to provide a platform to simplify the coordination and usage of such assets. The goal is to maintain information about all assets across labs at IITK. Our system provides interfaces for users (with different roles) to create activities within labs and request assets accordingly. We also support the generation and management of purchase orders for unavailable assets.
 
 \section{Methodology}
 
+The Asset Management System follows a structured procedural flow to manage users, labs, activities, funds, assets, and purchase orders. Each component is tied to a transactional routine ensuring traceability and control. The methodology is broken down into the following steps:
+
+Initially, a new user is created using the \texttt{create\_user} procedure. Users are assigned roles and associated with specific institutes and departments. Labs are then defined through the \texttt{create\_lab} procedure, each linked to a department.
+
+Fund allocation begins with \texttt{allocate\_funds\_to\_lab}, which deposits an initial budget to the lab. Activities are project-level initiatives within labs and are created using \texttt{create\_activity}. Once an activity is established, the lab can transfer part of its funds to the activity using \texttt{allocate\_funds\_to\_activity}.
+
+Users participating in an activity can request assets. If the requested item is already in the lab's inventory, it is directly issued using \texttt{issue\_assets}. Otherwise, the item must be created in the database using \texttt{create\_item}.
+
+For assets not readily available, a request is submitted through \texttt{raise\_request}. Authorized personnel review and approve this request using \texttt{approve\_request}. Upon approval, a purchase order is initiated via \texttt{create\_PO}, and its contents populated using \texttt{populate\_POItem}. The PO is then finalized through \texttt{approve\_PO}.
+
+Once assets are received, \texttt{receive\_PO} records the delivery and updates the inventory. This closes the original asset request via \texttt{close\_request}, after which assets can be issued through \texttt{issue\_assets}.
+
+If assets are no longer required, users can return them using \texttt{return\_assets}. Unused or remaining funds can be released with \texttt{deallocate\_funds}. Assets that are obsolete or broken can be removed from the system using \texttt{destroy\_asset}.
+
+When an activity concludes, it is terminated using \texttt{close\_activity}, which also ensures any remaining funds or returned assets are appropriately transferred back to the lab.
+
+This procedural framework ensures a controlled, auditable, and extendable system for asset and fund management in institutional environments.
+
+Once the schema was finalized, we created a relational database with foreign key constraints and logging mechanisms to maintain consistency and auditability.
+
+A full pipeline was designed for all core functionalities—starting from lab creation, fund allocation, item request and issuance, to asset return and activity closure. Each user action is tracked and reflected in child log tables for auditing.
+
+We implemented various stored procedures to encapsulate business logic and triggers to automate logging. A user interface was then created to allow real-time interaction with the system. This UI was tested using generated sample data to verify correctness and integrity.
+
 \section{Implementation and Results}
+We organized the implementation into three SQL files:
+\begin{itemize}
+  \item Table creation scripts
+  \item Stored procedures for various functionalities
+  \item Triggers to update child tables (e.g., logs) upon parent updates
 
-Link to code encoded in \url{URL}.
 
-\section{Discussion and Limitations}
+\begin{sidewaysfigure}[p]
+  \centering
+  \includesvg[width=\textheight]{EER_diagram.svg}
+  \caption{EER Diagram representing entities and relationships in the Asset Management System}
+  \label{fig:eer_diagram}
+\end{sidewaysfigure}
+\end{itemize}
+
+\subsection*{Stored Procedures}
+\begin{enumerate}
+  \item \texttt{sp\_create\_user} – Inserts a new user, assigns role and lab via \texttt{UserRole}.
+  \item \texttt{sp\_create\_lab} – Inserts a new lab.
+  \item \texttt{sp\_allocate\_funds\_to\_lab} – Adds funds to a lab and logs the addition.
+  \item \texttt{sp\_create\_activity} – Creates a lab activity with initial details.
+  \item \texttt{sp\_allocate\_funds\_to\_activity} – Transfers lab funds to an activity if sufficient.
+  \item \texttt{sp\_issue\_assets} – Issues assets to user under an activity.
+  \item \texttt{sp\_create\_item} – Creates a new item if it is not present.
+  \item \texttt{sp\_approve\_request} – Requests are approved to purchase item or rejected if funds are not sufficient.
+  \item \texttt{sp\_create\_purchase\_order} – Creates an order for an item to be purchased.
+  \item \texttt{sp\_populate\_POitem} – Populates a new item to the purchase table.
+  \item \texttt{sp\_approve\_PO} – Approve a purchase order if funds are sufficient.
+  \item \texttt{sp\_receive\_PO} – Receives purchase order of items.
+  \item \texttt{sp\_issue\_assets} – Logs issuance and updates quantity.
+  \item \texttt{sp\_return\_assets} – Logs returns and updates quantity.
+  \item \texttt{sp\_deallocate\_funds} – Returns the lab back to lab from an activity.
+  \item \texttt{sp\_close\_activity} – Closes an activity and refunds remaining funds.
+  \item \texttt{sp\_deactivate\_user} – Soft-deactivates a user.
+\end{enumerate}
+
+\subsection*{Triggers}
+
+To ensure transparency, enforce logging, and maintain data consistency, the system makes use of several SQL triggers. These are automatically invoked in response to specific database events and are primarily used to log activities and monitor critical operations.
+
+\begin{itemize}
+  \item \textbf{trg\_lab\_after\_insert, trg\_lab\_after\_update:} \\
+  These triggers are executed when a new lab is created or an existing lab's details are updated. They log the lab's metadata into the \texttt{LabLog} table, capturing changes in available funds and modification timestamps.
+
+  \item \textbf{trg\_labactivity\_after\_insert, trg\_labactivity\_after\_update:} \\
+  Triggered on insertion or update of lab activities. These log actions such as creation of new activities or reallocation of funds in the \texttt{ActivityLog} table, maintaining historical tracking of activity-level changes.
+
+  \item \textbf{trg\_po\_after\_insert, trg\_po\_after\_update:} \\
+  These triggers log the creation and status changes of Purchase Orders into the \texttt{POLog} table. Details include PO ID, initiating or approving user, and timestamps, enabling financial transparency.
+
+  \item \textbf{trg\_request\_after\_insert, trg\_request\_after\_update:} \\
+  Captures asset request creation and approval status changes. The logs record the requester, item, quantity, and request outcome in the \texttt{RequestLog} for traceability.
+
+  \item \textbf{trg\_asset\_after\_insert, trg\_asset\_after\_update:} \\
+  Triggered on addition or modification of assets in the inventory. These triggers update logs to reflect quantity changes, asset issuance, returns, or destruction.
+\end{itemize}
+
+These triggers form a foundational layer for enforcing audit trails in the database. Their presence ensures that any operation involving labs, assets, purchase orders, or requests is captured automatically for accountability and historical reference.
+
+\begin{itemize}
+  \item \textbf{LabLog Trigger:} \\
+  This trigger is executed during fund allocation to a lab. It logs the lab identifier, allocated amount, and timestamp into a separate \texttt{LabLog} table for historical reference and auditing.
+
+  \item \textbf{ActivityLog Trigger:} \\
+  This trigger fires when a new activity is created or when funds are allocated to an activity. It captures the activity ID, lab ID, fund amount, and the user responsible for the action. The log entry is saved in the \texttt{ActivityLog} table.
+
+  \item \textbf{POLog Trigger:} \\
+  The \texttt{POLog} trigger is used to monitor and log the creation and approval of purchase orders. Whenever a PO is inserted or its status changes to 'approved', the trigger stores relevant metadata (PO ID, approving user, timestamps) into the \texttt{POLog} table.
+\end{itemize}
+
+These triggers provide automatic, tamper-proof audit trails for critical financial and asset-related transactions, thus supporting institutional accountability and simplifying compliance monitoring.
+
+\section{Entities}
+Below is the list of key entities used in the system, each representing a specific data element tracked in the asset management process:
+
+\begin{itemize}
+  \item \textbf{RoleId, RoleName, RoleDesc, DateCreated, IsActive:} Represent user roles (e.g., Admin, Student) and their metadata like creation date and active status.
+  
+  \item \textbf{UserId, UserName, UserPassword, InstituteId, FirstName, MiddleName, LastName, Gender, DOB, Email, Contact, UserAddress, IsAppUser:} Define user credentials and profile information. \texttt{IsAppUser} flags whether the user has system login access.
+  
+  \item \textbf{DeptId, DeptName, DeptDesc:} Departments within the institute to which labs and users can belong.
+  
+  \item \textbf{LabId, LabName, FundsAvailable, DateModified, RecentActionTaken:} Labs associated with departments. Tracks available funds and last action on funds (e.g., Added, Refunded).
+  
+  \item \textbf{UserRoleId, DateJoined, DateLeft:} Assigns users to labs/departments with roles and tracks their period of association.
+  
+  \item \textbf{ActionTakenBy, ActionTaken, ActionDescription, Amount:} Captures actions (like fund allocation or item issuance) performed by users along with a description and amount affected.
+  
+  \item \textbf{ItemId, Category, Make, Model, WarrantyPeriodMonths, ItemDescription, CreatedBy:} Describe each unique item that can be used in a lab. Includes details such as brand, warranty, and creator.
+  
+  \item \textbf{ActivityId, InitiatorId, ActivityType, ActivityDescription, StartDate, EndDate, IsClosed:} Represents lab-based activities or projects. \texttt{IsClosed} indicates if the activity has concluded.
+  
+  \item \textbf{ActivityLogId, Funds:} Logs the history of fund allocation and usage per activity.
+  
+  \item \textbf{RequestId, RequestDate, Requestor, RequestStatus, QuantityRequested:} Represents a request made by a user for an item under a specific activity.
+  
+  \item \textbf{RequestLogId, RequestDescription:} Logs changes or actions on requests, such as approvals or rejections.
+  
+  \item \textbf{POId, OrderDate, POStatus:} Represents a Purchase Order raised to acquire items not available in the lab.
+  
+  \item \textbf{POItemId, QuantityOrdered, CostPerUnit:} Describes each line item in a purchase order.
+  
+  \item \textbf{POCreatedBy, POStatusDescription:} Details who created the PO and logs its status transition description.
+  
+  \item \textbf{AssetId, SerialNo, QuantityAvailable, StorageLocation, ShortDescription:} Defines a specific asset (based on an item), its stock level, and location in the lab.
+  
+  \item \textbf{TransactionId, TransactionAction:} Tracks asset transactions such as issuance or return.
+  
+  \item \textbf{ActivityTrasId, ProcessedBy, ActionDate:} Represents transactions performed on an activity involving asset issue/return, including the responsible lab assistant and date.
+\end{itemize}
+\section{Discussions and Limitations}
+
+The system successfully demonstrates a modular and traceable approach to managing funds, assets, and activities in a laboratory environment. The use of structured procedures and SQL triggers enables a high level of auditability and process automation.
+
+However, certain limitations were observed. One notable constraint is the system's inability to account for market-driven fluctuations in item prices. Currently, item costs are assumed static once entered into the purchase order, which may not reflect real-time pricing dynamics, especially in volatile procurement environments. This could lead to budget mismatches during actual procurement.
+
+Additionally, scalability to enterprise-wide usage and integration with accounting systems or external vendors (via APIs or EDI) remains unimplemented. The current UI is functional but minimal and may require enhancements for better accessibility .
+
+Future improvements can involve the inclusion of price update APIs, notification systems for procurement delays, and advanced analytics dashboards to support strategic decision-making.
 
 \section{Contributions}
+\begin{itemize}
+  \item Kartik Anant Kulkarni: Schema Design and Stored Procedures
+  \item Sharvil Sachin Athaley: Stored Procedures and Triggers
+  \item Sanath Salampuria: Data generation and SQL Queries
+  \item Samyak Singhania: SQL queries
+  \item Raghav Shukla: UI Creation and Pipeline Testing
+\end{itemize}
 
-Student 1 did \dots.
-Student 2 did \dots.
-Student 3 did \dots.
-Student 4 did \dots.
-Student 5 did \dots.
+Code repository: \url{https://github.com/kartik-iitk/Asset-Management}
 
 \end{document}

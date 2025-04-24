@@ -78,7 +78,7 @@ BEGIN
     INSERT INTO LabActivityLog
       (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
     VALUES
-      (NEW.ActivityId, USER(), 'Added', 'Funds Added', delta);
+      (NEW.ActivityId, USER(), 'Added', 'Funds Added', ABS(delta));
   ELSEIF labAction = 'Spent' THEN
     INSERT INTO LabActivityLog
       (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
@@ -88,7 +88,12 @@ BEGIN
     INSERT INTO LabActivityLog
       (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
     VALUES
-      (NEW.ActivityId, USER(), 'Refunded', 'Funds Refunded', delta);
+      (NEW.ActivityId, USER(), 'Refunded', 'Funds Refunded', ABS(delta));
+  ELSEIF labAction = 'Allocated' THEN
+    INSERT INTO LabActivityLog
+      (ActivityId, ActionTakenBy, ActionTaken, ActionDescription, Funds)
+    VALUES
+      (NEW.ActivityId, USER(), 'Allocated', 'Funds Allocated', ABS(delta));
   END IF;
 END$$
 
@@ -120,7 +125,7 @@ BEGIN
     INSERT INTO LabLog
       (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
     VALUES
-      (NEW.LabId, USER(), 'Added', 'Funds Added', delta);
+      (NEW.LabId, USER(), 'Added', 'Funds Added', ABS(delta));
   ELSEIF labAction = 'Allocated' THEN
     INSERT INTO LabLog
       (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
@@ -128,9 +133,9 @@ BEGIN
       (NEW.LabId, USER(), 'Allocated', 'Funds Allocated', ABS(delta));
   ELSEIF labAction = 'Refunded' THEN
     INSERT INTO LabLog
-      (LabId, ActionTakenBy, ActionTaken, ActionDescription, Amount)
+      (LabId, ActionTakenBy, ActionTaken, ActionDescription, ABS(Amount))
     VALUES
-      (NEW.LabId, USER(), 'Refunded', 'Funds Refunded', delta);
+      (NEW.LabId, USER(), 'Refunded', 'Funds Refunded', ABS(delta));
   END IF;
 END$$
 
