@@ -157,8 +157,7 @@ CREATE PROCEDURE sp_create_activity(
   IN p_Description    VARCHAR(100),
   IN p_InitialFunds   FLOAT,
   IN p_StartDate      DATETIME,
-  IN p_EndDate        DATETIME,
-  IN p_IsClosed       BOOLEAN
+  IN p_EndDate        DATETIME
 )
 BEGIN
   DECLARE v_FundsAvail FLOAT;
@@ -184,7 +183,7 @@ BEGIN
        FundsAvailable, StartDate, EndDate, IsClosed, DateCreated)
     VALUES
       (p_LabId, p_InitiatorId, p_Type, p_Description,
-       p_InitialFunds, p_StartDate, p_EndDate, p_IsClosed, NOW());
+       p_InitialFunds, p_StartDate, p_EndDate, FALSE, NOW());
     COMMIT;
   END IF;
 
@@ -238,7 +237,20 @@ CREATE PROCEDURE sp_issue_assets(
   IN p_ShortDesc      VARCHAR(100)
 )
 BEGIN
+  DECLARE v_QuantityAvailable INT;
+
   START TRANSACTION;
+    SELECT QuantityAvailable
+      INTO v_QuantityAvailable
+    FROM Asset
+    WHERE AssetId = p_AssetId
+    FOR UPDATE;
+
+    IF v_QuantityAvailable < p_Quantity THEN
+      SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Insufficient asset quantity in the lab';
+    END IF;
+
     INSERT INTO ActivityItemTransaction  
       (ActivityId, AssetId, Requestor, ProcessedBy, ActionTaken, ActionDate, Quantity, ShortDescription)  
     VALUES  
@@ -343,7 +355,6 @@ END$$
 
 CREATE PROCEDURE sp_create_PO(
   IN p_ActivityId INT,
-  IN p_Amount     FLOAT,
   OUT p_POId      INT
 )
 BEGIN
@@ -357,7 +368,7 @@ BEGIN
     INSERT INTO PurchaseOrder
       (ActivityId, OrderDate, Amount, POStatus)
     VALUES
-      (p_ActivityId, NOW(), p_Amount, 'Pending');
+      (p_ActivityId, NOW(), 0, 'Pending');
 
     SET p_POId = LAST_INSERT_ID();
   COMMIT;
@@ -380,6 +391,11 @@ BEGIN
   START TRANSACTION;
     INSERT INTO POItem (POId, ItemId, QuantityOrdered, CostPerUnit)
     VALUES (p_POId, p_ItemId, p_QuantityOrdered, p_CostPerUnit);
+
+    UPDATE PurchaseOrder
+    SET Amount = Amount + (p_QuantityOrdered * p_CostPerUnit)
+    WHERE POId = p_POId;
+
   COMMIT;
 END$$
 
@@ -419,20 +435,23 @@ BEGIN
     FOR UPDATE;
 
     IF v_POAmount > v_FundsAvail THEN
-      -- Insufficient funds: reject PO
+      -- Insufficient funds: reject PO, update status, and return error message
       UPDATE PurchaseOrder
-        SET POStatus = 'Rejected',
-            DateModified = NOW()
+      SET POStatus = 'Rejected',
+        DateModified = NOW()
       WHERE POId = p_POId;
+      
+      SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Insufficient funds: PO is rejected';
     ELSE
       -- Sufficient funds: approve PO and update activity funds
       UPDATE PurchaseOrder
-        SET POStatus = 'Approved',
-            DateModified = NOW()
+      SET POStatus = 'Approved',
+        DateModified = NOW()
       WHERE POId = p_POId;
 
       UPDATE LabActivity
-        SET FundsAvailable = FundsAvailable - v_POAmount
+      SET FundsAvailable = FundsAvailable - v_POAmount
       WHERE ActivityId = v_ActivityId;
     END IF;
 
@@ -443,24 +462,27 @@ END$$
 CREATE PROCEDURE sp_receive_items(
   IN p_POId           INT,
   IN p_StorageLoc     VARCHAR(100),
-  IN p_ShortDesc      VARCHAR(100)
+  IN p_ShortDesc      VARCHAR(100),
+  IN p_SerialNo       VARCHAR(100)
 )
 BEGIN
   START TRANSACTION;
-    -- 1) for each POItem, insert into Asset or update existing record by incrementing QuantityAvailable
-    INSERT INTO Asset (LabId, ItemId, SerialNo, QuantityAvailable, StorageLocation, ShortDescription)  
-    SELECT L.LabId, PI.ItemId, CONCAT('PO', p_POId, '-', PI.POItemId),
-           PI.QuantityOrdered, p_StorageLoc, p_ShortDesc
+    INSERT INTO Asset (LabId, ItemId, QuantityAvailable, StorageLocation, ShortDescription, SerialNo)
+    SELECT L.LabId, PI.ItemId, PI.QuantityOrdered, p_StorageLoc, p_ShortDesc, p_SerialNo
     FROM POItem PI  
-    JOIN PurchaseOrder PO USING (POId)  
-    JOIN LabActivity LA ON LA.ActivityId = PO.ActivityId  
-    JOIN Lab L ON L.LabId = LA.LabId  
+      JOIN PurchaseOrder PO USING (POId)  
+      JOIN LabActivity LA ON LA.ActivityId = PO.ActivityId  
+      JOIN Lab L ON L.LabId = LA.LabId  
     WHERE PI.POId = p_POId
-    ON DUPLICATE KEY UPDATE QuantityAvailable = QuantityAvailable + VALUES(QuantityAvailable);
+    ON DUPLICATE KEY UPDATE
+      QuantityAvailable = QuantityAvailable + VALUES(QuantityAvailable),
+      StorageLocation = IF(StorageLocation IS NULL OR StorageLocation = '', VALUES(StorageLocation), StorageLocation),
+      ShortDescription = IF(ShortDescription IS NULL OR ShortDescription = '', VALUES(ShortDescription), ShortDescription),
+      SerialNo = IF(SerialNo IS NULL OR SerialNo = '', VALUES(SerialNo), SerialNo);
 
-    -- 2) close the PO
     UPDATE PurchaseOrder  
-      SET POStatus = 'Closed', DateModified = NOW()  
+      SET POStatus = 'Closed',
+          DateModified = NOW()
     WHERE POId = p_POId;
   COMMIT;
 END$$
@@ -635,7 +657,8 @@ BEGIN
     -- Close the activity: reset funds and update the isClosed flag
     UPDATE LabActivity
       SET FundsAvailable = 0,
-          IsClosed = TRUE
+          IsClosed = TRUE,
+		      EndDate =  NOW()
     WHERE ActivityId = p_ActivityId;
 
     -- Return all issued assets: add back quantities to Asset and mark transactions as returned
