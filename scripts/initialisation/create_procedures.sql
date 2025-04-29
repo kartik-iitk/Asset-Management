@@ -505,10 +505,19 @@ BEGIN
 
   START TRANSACTION;
     -- Fetch activity ID, the asset being requested, and the required quantity
-    SELECT ActivityId, AssetId, RequestedQuantity
+   /* SELECT ActivityId, AssetId, RequestedQuantity
       INTO v_ActivityId, v_AssetId, v_ReqQuantity
     FROM Request
     WHERE RequestId = p_RequestId
+    FOR UPDATE;*/
+-- changed query
+    SELECT r.ActivityId, a.AssetId, r.QuantityRequested
+	  INTO v_ActivityId, v_AssetId, v_ReqQuantity
+    FROM Request r, Asset a, LabActivity as L
+    WHERE r.ItemId = a.ItemId
+    AND L.ActivityID = r.ActivityID
+    AND	r.RequestId = p_RequestId
+    AND a.LabID = L.LabID
     FOR UPDATE;
 
     -- Check if sufficient quantity is available in the asset stock
@@ -580,14 +589,17 @@ BEGIN
     SET MESSAGE_TEXT = 'Insufficient funds in the activity for deallocation';
   END IF;
 
-  UPDATE LabActivity
-    SET FundsAvailable = FundsAvailable - p_Amount
-  WHERE ActivityId = p_ActivityId;
+-- Changed order
 
-  UPDATE Lab
+  UPDATE Lab  
     SET FundsAvailable = FundsAvailable + p_Amount,
       RecentActionTaken = 'Refunded'
   WHERE LabId = p_LabId;
+ 
+ UPDATE LabActivity
+    SET FundsAvailable = FundsAvailable - p_Amount
+  WHERE ActivityId = p_ActivityId;
+-- Changed order
   COMMIT;
 END$$
 
@@ -662,7 +674,7 @@ BEGIN
     WHERE ActivityId = p_ActivityId;
 
     -- Return all issued assets: add back quantities to Asset and mark transactions as returned
-    UPDATE Asset A
+ /*   UPDATE Asset A
       JOIN (
         SELECT AssetId, SUM(Quantity) AS TotalIssued
         FROM ActivityItemTransaction
@@ -675,7 +687,44 @@ BEGIN
       SET ActionTaken = 'Returned'
     WHERE ActivityId = p_ActivityId
       AND ActionTaken = 'Issued';
-      
+  */
+  -- changed
+  UPDATE Asset A
+      JOIN (
+		SELECT A.AssetId, (A.Issued - COALESCE(B.Returned, 0)) TotalIssued
+		FROM	(SELECT AssetId, SUM(Quantity) AS Issued
+				FROM ActivityItemTransaction
+			    WHERE ActivityId = p_ActivityId AND ActionTaken = 'Issued'
+				GROUP BY AssetId) A
+		LEFT OUTER JOIN 
+				(SELECT AssetId, SUM(Quantity) AS Returned
+				FROM ActivityItemTransaction
+			    WHERE ActivityId = p_ActivityId AND ActionTaken = 'Returned'
+				GROUP BY AssetId) B
+		ON B.AssetId = A.AssetId
+	) AS T ON A.AssetId = T.AssetId
+	SET A.QuantityAvailable = A.QuantityAvailable + T.TotalIssued;
+    
+    INSERT INTO ActivityItemTransaction  
+      (ActivityId, AssetId, Requestor, ActionTaken, ActionDate, Quantity)  
+	SELECT F.ActivityId, F.AssetId, F.Requestor, 'Returned', NOW(), C.TotalIssued
+	FROM ActivityItemTransaction F, 
+		(SELECT A.AssetId, (A.Issued - COALESCE(B.Returned, 0)) TotalIssued
+		FROM (SELECT AssetId, SUM(Quantity) AS Issued
+				FROM ActivityItemTransaction
+				WHERE ActivityId = p_ActivityId AND ActionTaken = 'Issued'
+				GROUP BY AssetId) A
+		LEFT OUTER JOIN 
+				(SELECT AssetId, SUM(Quantity) AS Returned
+				FROM ActivityItemTransaction
+				WHERE ActivityId = p_ActivityId AND ActionTaken = 'Returned'
+				GROUP BY AssetId) B
+		ON B.AssetId = A.AssetId) C
+	WHERE F.AssetId = C.AssetId
+	AND F.ActivityId = p_ActivityId
+	AND F.ActionTaken = 'Issued';
+  -- changed   
+  
   COMMIT;
 END$$
 
