@@ -2,15 +2,11 @@
 
 ## CS315 Mini Project 2024-25-II
 
-## Group Details
+This project integrates a robust MySQL database with an intuitive Streamlit frontend to provide a complete solution for lab asset management at IITK. The system efficiently oversees assets using 17 meticulously designed tables and offers comprehensive support for the full pipeline of creating, reviewing, and approving requests, and generating purchase orders, followed by generating detailed reports.
 
-| Name                   | Roll No. |
-| ---------------------- | -------- |
-| Kartik Anant Kulkarni  | 210493   |
-| Sharvil Sachin Athaley | 210961   |
-| Samyak Singhania       | 210917   |
-| Sanath Salampuria      | 210919   |
-| Raghav Shukla          | 210800   |
+Enhanced with dynamic data visualization, the application ensures smooth and secure management of lab assets while delivering real-time insights and seamless database interactions.
+
+![Dashboard](./assets/Frontend.png)
 
 ## Requirements
 
@@ -68,3 +64,13 @@ streamlit run streamlit_last.py
 ```
 
 Note: In the login screen, please access as the admin user using Username: A00001 and Password: A00001 (and press login button twice).
+
+## Group Details
+
+| Name                   | Roll No. |
+| ---------------------- | -------- |
+| Kartik Anant Kulkarni  | 210493   |
+| Sharvil Sachin Athaley | 210961   |
+| Samyak Singhania       | 210917   |
+| Sanath Salampuria      | 210919   |
+| Raghav Shukla          | 210800   |
