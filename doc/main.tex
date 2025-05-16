@@ -7,6 +7,15 @@
 \usepackage{url}
 \usepackage{rotating}
 
+% Key Issues:
+% 1. LastActionTaken Column in the lab is incorrect. When you have two activities in parallel, the log will be incorrectly updated. This seems to be the only issue in the schema.
+% 2. Numerous edge cases not handled in the procedure: check if activity is closed or not, or item exists or such things.
+% 3. Closing the activity etc. not implemented in the UI. Many operations need to be implemented. Also access control needs to be maintained.
+% 4. Data1.xlsx named wrongly, should be data.xlsx
+% 5. Requests are not getting closed due to error in stored procedure.
+% 6. LabActivityLog is incorrectly recording spent instead of refunded when activity is not closed but an amount is deallocated.
+% 7. While closing activity, it does not account for the already returned items and only looks at the issued items.  
+
 \title{\bf IITK Lab Inventory \& Asset Tracking}
 \author{
   \textbf{\underline{Group 2}} \\
